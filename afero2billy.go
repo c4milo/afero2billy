@@ -43,12 +43,7 @@ func (fs *Billy) Create(filename string) (billy.File, error) {
 // returned file can be used for reading; the associated file descriptor has
 // mode O_RDONLY.
 func (fs *Billy) Open(filename string) (billy.File, error) {
-	f, err := fs.afero.Fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	return &file{File: f}, nil
+	return fs.OpenFile(filename, os.O_RDONLY, 0)
 }
 
 // OpenFile is the generalized open call; most users will use Open or Create
