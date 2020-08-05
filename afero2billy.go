@@ -56,6 +56,12 @@ func (fs *Billy) Open(filename string) (billy.File, error) {
 // perm, (0666 etc.) if applicable. If successful, methods on the returned
 // File can be used for I/O.
 func (fs *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
+	if flag&os.O_CREATE != 0 {
+		if err := fs.createDir(filename); err != nil {
+			return nil, err
+		}
+	}
+
 	f, err := fs.afero.Fs.OpenFile(filename, flag, perm)
 	if err != nil {
 		return nil, err
@@ -72,8 +78,11 @@ func (fs *Billy) Stat(filename string) (os.FileInfo, error) {
 // Rename renames (moves) oldpath to newpath. If newpath already exists and
 // is not a directory, Rename replaces it. OS-specific restrictions may
 // apply when oldpath and newpath are in different directories.
-func (fs *Billy) Rename(from, to string) error {
-	return fs.afero.Fs.Rename(from, to)
+func (fs *Billy) Rename(oldpath, newpath string) error {
+	if err := fs.createDir(newpath); err != nil {
+		return err
+	}
+	return fs.afero.Fs.Rename(oldpath, newpath)
 }
 
 // Remove removes the named file or directory.
@@ -98,6 +107,10 @@ func (fs *Billy) Join(elem ...string) string {
 // It is the caller's responsibility to remove the file when no longer
 // needed.
 func (fs *Billy) TempFile(dir, prefix string) (billy.File, error) {
+	if err := fs.createDir(dir + string(os.PathSeparator)); err != nil {
+		return nil, err
+	}
+
 	f, err := fs.afero.TempFile(dir, prefix)
 	if err != nil {
 		return nil, err
@@ -200,5 +213,17 @@ func (f *file) Lock() error {
 // Unlock unlocks the file.
 func (f *file) Unlock() error {
 	f.m.Unlock()
+	return nil
+}
+
+// createDir was copied from https://github.com/go-git/go-billy/blame/v5.0.0/osfs/os.go#L45
+func (fs *Billy) createDir(fullpath string) error {
+	dir := filepath.Dir(fullpath)
+	if dir != "." {
+		if err := fs.afero.Fs.MkdirAll(dir, defaultDirectoryMode); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
