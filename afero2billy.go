@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/go-git/go-billy/v5"
@@ -43,12 +44,7 @@ func (fs *Billy) Create(filename string) (billy.File, error) {
 // returned file can be used for reading; the associated file descriptor has
 // mode O_RDONLY.
 func (fs *Billy) Open(filename string) (billy.File, error) {
-	f, err := fs.afero.Fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	return &file{File: f}, nil
+	return fs.OpenFile(filename, os.O_RDONLY, 0)
 }
 
 // OpenFile is the generalized open call; most users will use Open or Create
@@ -67,7 +63,10 @@ func (fs *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.Fi
 		return nil, err
 	}
 
-	return &file{File: f}, err
+	name := filepath.ToSlash(f.Name())
+	name = strings.TrimPrefix(name, fs.root)
+
+	return &file{File: f, name: name}, err
 }
 
 // Stat returns a FileInfo describing the named file.
@@ -200,7 +199,8 @@ func (fs *Billy) Capabilities() billy.Capability {
 // file is a wrapper for an os.File which adds support for file locking.
 type file struct {
 	afero.File
-	m sync.Mutex
+	name string
+	m    sync.Mutex
 }
 
 //Lock locks the file like e.g. flock. It protects against access from
