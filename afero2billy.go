@@ -5,10 +5,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/helper/chroot"
 	"github.com/spf13/afero"
 )
 
@@ -52,7 +52,7 @@ func (fs *Billy) Open(filename string) (billy.File, error) {
 // perm, (0666 etc.) if applicable. If successful, methods on the returned
 // File can be used for I/O.
 func (fs *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
-	if flag&os.O_CREATE != 0 {
+	if (flag & os.O_CREATE) == os.O_CREATE {
 		if err := fs.createDir(filename); err != nil {
 			return nil, err
 		}
@@ -63,15 +63,20 @@ func (fs *Billy) OpenFile(filename string, flag int, perm os.FileMode) (billy.Fi
 		return nil, err
 	}
 
-	name := filepath.ToSlash(f.Name())
-	name = strings.TrimPrefix(name, fs.root)
+	// name := filepath.ToSlash(f.Name())
+	// name = strings.TrimPrefix(name, fs.root)
 
-	return &file{File: f, name: name}, err
+	return &file{File: f}, err
 }
 
 // Stat returns a FileInfo describing the named file.
 func (fs *Billy) Stat(filename string) (os.FileInfo, error) {
-	return fs.afero.Fs.Stat(filename)
+	fi, err := fs.afero.Fs.Stat(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	return fi, nil
 }
 
 // Rename renames (moves) oldpath to newpath. If newpath already exists and
@@ -171,13 +176,8 @@ func (fs *Billy) Readlink(link string) (string, error) {
 // Chroot returns a new filesystem from the same type where the new root is
 // the given path. Files outside of the designated directory tree cannot be
 // accessed.
-func (fs *Billy) Chroot(basePath string) (billy.Filesystem, error) {
-	return &Billy{
-		root: basePath,
-		afero: afero.Afero{
-			Fs: afero.NewBasePathFs(fs.afero.Fs, basePath),
-		},
-	}, nil
+func (fs *Billy) Chroot(path string) (billy.Filesystem, error) {
+	return chroot.New(fs, path), nil
 }
 
 // Root returns the root path of the filesystem.
@@ -199,8 +199,8 @@ func (fs *Billy) Capabilities() billy.Capability {
 // file is a wrapper for an os.File which adds support for file locking.
 type file struct {
 	afero.File
-	name string
-	m    sync.Mutex
+	// name string
+	m sync.Mutex
 }
 
 //Lock locks the file like e.g. flock. It protects against access from
